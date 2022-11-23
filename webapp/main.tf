@@ -34,11 +34,11 @@ resource "aws_subnet" "demoaspnetcore_subnet_private" {
   vpc_id            = aws_vpc.demoaspnetcore_vpc.id
   cidr_block        = "172.16.10.0/24"
   availability_zone = "us-east-1a"
-
   tags = {
-    Name = "demoaspnetcore_subnet"
+    Name = "demoaspnetcore_subnet_private"
   }
 }
+
 resource "aws_subnet" "demoaspnetcore_subnet_public1" {
   vpc_id            = aws_vpc.demoaspnetcore_vpc.id
   cidr_block        = "172.16.20.0/24"
@@ -102,7 +102,6 @@ resource "aws_security_group" "webserverInstance-sg" {
 
 resource "aws_security_group" "jenkinsInstance-sg" {
     name = "jenkinsInstance-sg"
-    key_name = "pcKP"
     ingress {
         from_port = 22
         to_port = 22
@@ -152,6 +151,7 @@ resource "aws_instance" "webserver2" {
 resource "aws_instance" "jenkinsServer" {
   ami             = "ami-0b0dcb5067f052a63" # Amazon Linux 2 AMI (HVM) - Kernel 5.10, SSD Volume Type
   instance_type   = "t2.micro"
+  key_name = "pcKP"
   subnet_id = aws_subnet.demoaspnetcore_subnet_public1.id
   security_groups = [aws_security_group.jenkinsInstance-sg.id]
   associate_public_ip_address =  true
@@ -185,8 +185,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "bucket_crypto_con
     }
   }
 }
-
-
 
 resource "aws_lb_target_group" "demoaspnet-tg" {
   name     = "demoaspnet-tg"
@@ -261,6 +259,10 @@ resource "aws_lb" "demoaspnetcore-load_balancer" {
 
   subnet_mapping {
     subnet_id     = aws_subnet.demoaspnetcore_subnet_public2.id
+  }
+
+  subnet_mapping {
+    subnet_id     = aws_subnet.demoaspnetcore_subnet_private.id
   }
   security_groups    = [aws_security_group.demoaspnetcore-alb-sg.id]
 }
