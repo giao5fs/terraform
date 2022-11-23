@@ -21,26 +21,146 @@ provider "aws" {
   region = "us-east-1"
 }
 
-resource "aws_instance" "instance_1" {
-  subnet_id = "subnet-0bef69121e3887193"
+resource "aws_vpc" "demoaspnetcore_vpc" {
+  cidr_block = "172.16.0.0/16"
+  enable_dns_hostnames = true
+
+  tags = {
+    Name = "demoaspnetcore_vpc"
+  }
+}
+
+resource "aws_subnet" "demoaspnetcore_subnet_private" {
+  vpc_id            = aws_vpc.demoaspnetcore_vpc.id
+  cidr_block        = "172.16.10.0/24"
+  availability_zone = "us-east-1a"
+
+  tags = {
+    Name = "demoaspnetcore_subnet"
+  }
+}
+resource "aws_subnet" "demoaspnetcore_subnet_public1" {
+  vpc_id            = aws_vpc.demoaspnetcore_vpc.id
+  cidr_block        = "172.16.20.0/24"
+  availability_zone = "us-east-1b"
+  map_public_ip_on_launch = true
+  tags = {
+    Name = "demoaspnetcore_subnet_public1"
+  }
+}
+
+resource "aws_subnet" "demoaspnetcore_subnet_public2" {
+  vpc_id            = aws_vpc.demoaspnetcore_vpc.id
+  cidr_block        = "172.16.30.0/24"
+  availability_zone = "us-east-1c"
+  map_public_ip_on_launch = true
+  tags = {
+    Name = "demoaspnetcore_subnet_public2"
+  }
+}
+
+resource "aws_internet_gateway" "demoaspnetcore-igw" {
+  vpc_id = aws_vpc.demoaspnetcore_vpc.id
+  tags = {
+    Name = "demoaspnetcore-igw"
+  }
+}
+
+resource "aws_route_table" "demoaspnetcore_routetable_public" {
+    vpc_id = aws_vpc.demoaspnetcore_vpc.id
+    route {
+        cidr_block = "0.0.0.0/0"
+        gateway_id = aws_internet_gateway.demoaspnetcore-igw.id
+    }
+    tags = {
+        Name = "demoaspnetcore_routetable_public"
+    }
+}
+
+resource "aws_route_table_association" "demoaspnetcore_subnet_public1_ass" {
+    subnet_id = aws_subnet.demoaspnetcore_subnet_public1.id
+    route_table_id = aws_route_table.demoaspnetcore_routetable_public.id
+}
+
+resource "aws_route_table_association" "demoaspnetcore_subnet_public2_ass" {
+    subnet_id = aws_subnet.demoaspnetcore_subnet_public2.id
+    route_table_id = aws_route_table.demoaspnetcore_routetable_public.id
+}
+
+resource "aws_security_group" "webserverInstance-sg" {
+    name = "webserverInstance-sg"
+    ingress {
+        from_port = 5000
+        to_port = 5000
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    vpc_id = aws_vpc.demoaspnetcore_vpc.id
+}
+
+
+resource "aws_security_group" "jenkinsInstance-sg" {
+    name = "jenkinsInstance-sg"
+    key_name = "pcKP"
+    ingress {
+        from_port = 22
+        to_port = 22
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    ingress {
+        from_port = 8080
+        to_port = 8080
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    vpc_id = aws_vpc.demoaspnetcore_vpc.id
+}
+
+resource "aws_instance" "webserver1" {
   ami             = "ami-0b0dcb5067f052a63" # Amazon Linux 2 AMI (HVM) - Kernel 5.10, SSD Volume Type
   instance_type   = "t2.micro"
-  security_groups = [aws_security_group.instances.name]
+  subnet_id = aws_subnet.demoaspnetcore_subnet_private.id
+  security_groups = [aws_security_group.webserverInstance-sg.id]
+  tags = {
+    Name = "webserver1"
+  }
   user_data       = <<-EOF
               #!/bin/bash
               echo "Hello, World 1" > index.html
-              python3 -m http.server 8080 &
+              python3 -m http.server 5000 &
               EOF
 }
 
-resource "aws_instance" "instance_2" {
-  subnet_id = "subnet-0bef69121e3887193"
+resource "aws_instance" "webserver2" {
   ami             = "ami-0b0dcb5067f052a63" # Amazon Linux 2 AMI (HVM) - Kernel 5.10, SSD Volume Type
   instance_type   = "t2.micro"
-  security_groups = [aws_security_group.instances.name]
+  subnet_id = aws_subnet.demoaspnetcore_subnet_private.id
+  security_groups = [aws_security_group.webserverInstance-sg.id]
+  tags = {
+    Name = "webserver2"
+  }
   user_data       = <<-EOF
               #!/bin/bash
               echo "Hello, World 2" > index.html
+              python3 -m http.server 5000 &
+              EOF
+}
+
+resource "aws_instance" "jenkinsServer" {
+  ami             = "ami-0b0dcb5067f052a63" # Amazon Linux 2 AMI (HVM) - Kernel 5.10, SSD Volume Type
+  instance_type   = "t2.micro"
+  subnet_id = aws_subnet.demoaspnetcore_subnet_public1.id
+  security_groups = [aws_security_group.jenkinsInstance-sg.id]
+  associate_public_ip_address =  true
+  tags = {
+    Name = "jenkinsServer"
+  }
+  user_data       = <<-EOF
+              #!/bin/bash
+              echo "Hello, World from Jenkins" > index.html
               python3 -m http.server 8080 &
               EOF
 }
@@ -66,30 +186,87 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "bucket_crypto_con
   }
 }
 
-data "aws_vpc" "default_vpc" {
-  default = true
+
+
+resource "aws_lb_target_group" "demoaspnet-tg" {
+  name     = "demoaspnet-tg"
+  port     = 8080
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.demoaspnetcore_vpc.id
+
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200"
+    interval            = 15
+    timeout             = 3
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
 }
 
-data "aws_subnet_ids" "default_subnet" {
-  vpc_id = data.aws_vpc.default_vpc.id
+resource "aws_lb_target_group_attachment" "webserver1-att" {
+  target_group_arn = aws_lb_target_group.demoaspnet-tg.arn
+  target_id        = aws_instance.webserver1.id
+  port             = 5000
 }
 
-resource "aws_security_group" "instances" {
-  name = "instance-security-group"
+resource "aws_lb_target_group_attachment" "webserver2-att" {
+  target_group_arn = aws_lb_target_group.demoaspnet-tg.arn
+  target_id        = aws_instance.webserver2.id
+  port             = 5000
 }
 
-resource "aws_security_group_rule" "allow_http_inbound" {
-  type              = "ingress"
-  security_group_id = aws_security_group.instances.id
+resource "aws_lb_listener_rule" "webserver-lsn" {
+  listener_arn = aws_lb_listener.demoaspnetcore-http.arn
+  priority     = 100
 
-  from_port   = 8080
-  to_port     = 8080
-  protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
+  condition {
+    path_pattern {
+      values = ["*"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.demoaspnet-tg.arn
+  }
 }
 
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.load_balancer.arn
+
+resource "aws_security_group" "demoaspnetcore-alb-sg" {
+  ingress {
+        from_port = 80
+        to_port = 80
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+  egress {
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+  name = "demoaspnetcore-alb-sg"
+  vpc_id = aws_vpc.demoaspnetcore_vpc.id
+    
+}
+
+resource "aws_lb" "demoaspnetcore-load_balancer" {
+  name               = "web-app-lb"
+  load_balancer_type = "application"
+  subnet_mapping {
+    subnet_id     = aws_subnet.demoaspnetcore_subnet_public1.id
+  }
+
+  subnet_mapping {
+    subnet_id     = aws_subnet.demoaspnetcore_subnet_public2.id
+  }
+  security_groups    = [aws_security_group.demoaspnetcore-alb-sg.id]
+}
+
+resource "aws_lb_listener" "demoaspnetcore-http" {
+  load_balancer_arn = aws_lb.demoaspnetcore-load_balancer.arn
 
   port = 80
 
@@ -105,118 +282,4 @@ resource "aws_lb_listener" "http" {
       status_code  = 404
     }
   }
-}
-
-resource "aws_lb_target_group" "instances" {
-  name     = "example-target-group"
-  port     = 8080
-  protocol = "HTTP"
-  vpc_id   = data.aws_vpc.default_vpc.id
-
-  health_check {
-    path                = "/"
-    protocol            = "HTTP"
-    matcher             = "200"
-    interval            = 15
-    timeout             = 3
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-  }
-}
-
-resource "aws_lb_target_group_attachment" "instance_1" {
-  target_group_arn = aws_lb_target_group.instances.arn
-  target_id        = aws_instance.instance_1.id
-  port             = 8080
-}
-
-resource "aws_lb_target_group_attachment" "instance_2" {
-  target_group_arn = aws_lb_target_group.instances.arn
-  target_id        = aws_instance.instance_2.id
-  port             = 8080
-}
-
-resource "aws_lb_listener_rule" "instances" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 100
-
-  condition {
-    path_pattern {
-      values = ["*"]
-    }
-  }
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.instances.arn
-  }
-}
-
-
-resource "aws_security_group" "alb" {
-  name = "alb-security-group"
-}
-
-resource "aws_security_group_rule" "allow_alb_http_inbound" {
-  type              = "ingress"
-  security_group_id = aws_security_group.alb.id
-
-  from_port   = 80
-  to_port     = 80
-  protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-
-}
-
-resource "aws_security_group_rule" "allow_alb_all_outbound" {
-  type              = "egress"
-  security_group_id = aws_security_group.alb.id
-
-  from_port   = 0
-  to_port     = 0
-  protocol    = "-1"
-  cidr_blocks = ["0.0.0.0/0"]
-
-}
-
-
-resource "aws_lb" "load_balancer" {
-  name               = "web-app-lb"
-  load_balancer_type = "application"
-  subnets            = data.aws_subnet_ids.default_subnet.ids
-  security_groups    = [aws_security_group.alb.id]
-
-}
-
-resource "aws_route53_zone" "primary" {
-  name = "miendongnuocanh.be"
-}
-
-resource "aws_route53_record" "root" {
-  zone_id = aws_route53_zone.primary.zone_id
-  name    = "miendongnuocanh.be"
-  type    = "A"
-
-  alias {
-    name                   = aws_lb.load_balancer.dns_name
-    zone_id                = aws_lb.load_balancer.zone_id
-    evaluate_target_health = true
-  }
-}
-
-resource "aws_db_instance" "db_instance" {
-  allocated_storage          = 20
-  # This allows any minor version within the major engine_version
-  # defined below, but will also result in allowing AWS to auto
-  # upgrade the minor version of your DB. This may be too risky
-  # in a real production environment.
-  auto_minor_version_upgrade = true
-  storage_type               = "standard"
-  engine                     = "postgres"
-  engine_version             = "12"
-  instance_class             = "db.t2.micro"
-  name                       = "mydb"
-  username                   = "foo"
-  password                   = "foobarbaz"
-  skip_final_snapshot        = true
 }
