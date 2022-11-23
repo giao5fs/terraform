@@ -1,8 +1,8 @@
 # Ignore everything:
-*aws-backend/
-*demo-reference/
-*sample-terraform-structure/
-*webapp/
+aws-backend/*
+demo-reference/*
+sample-terraform-structure/*
+webapp/*
 # Except for :
 !aws-backend/*.tf
 !demo-reference/*.tf
