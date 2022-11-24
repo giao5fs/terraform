@@ -18,11 +18,11 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  region = var.aws_region
 }
 
 resource "aws_vpc" "demoaspnetcore_vpc" {
-  cidr_block = "172.16.0.0/16"
+  cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
 
   tags = {
@@ -30,19 +30,10 @@ resource "aws_vpc" "demoaspnetcore_vpc" {
   }
 }
 
-resource "aws_subnet" "demoaspnetcore_subnet_private" {
-  vpc_id            = aws_vpc.demoaspnetcore_vpc.id
-  cidr_block        = "172.16.10.0/24"
-  availability_zone = "us-east-1a"
-  tags = {
-    Name = "demoaspnetcore_subnet_private"
-  }
-}
-
 resource "aws_subnet" "demoaspnetcore_subnet_public1" {
-  vpc_id            = aws_vpc.demoaspnetcore_vpc.id
-  cidr_block        = "172.16.20.0/24"
-  availability_zone = "us-east-1b"
+  vpc_id                  = aws_vpc.demoaspnetcore_vpc.id
+  cidr_block              = "172.16.10.0/24"
+  availability_zone       = "us-east-1b"
   map_public_ip_on_launch = true
   tags = {
     Name = "demoaspnetcore_subnet_public1"
@@ -50,9 +41,9 @@ resource "aws_subnet" "demoaspnetcore_subnet_public1" {
 }
 
 resource "aws_subnet" "demoaspnetcore_subnet_public2" {
-  vpc_id            = aws_vpc.demoaspnetcore_vpc.id
-  cidr_block        = "172.16.30.0/24"
-  availability_zone = "us-east-1c"
+  vpc_id                  = aws_vpc.demoaspnetcore_vpc.id
+  cidr_block              = "172.16.20.0/24"
+  availability_zone       = "us-east-1c"
   map_public_ip_on_launch = true
   tags = {
     Name = "demoaspnetcore_subnet_public2"
@@ -67,102 +58,110 @@ resource "aws_internet_gateway" "demoaspnetcore-igw" {
 }
 
 resource "aws_route_table" "demoaspnetcore_routetable_public" {
-    vpc_id = aws_vpc.demoaspnetcore_vpc.id
-    route {
-        cidr_block = "0.0.0.0/0"
-        gateway_id = aws_internet_gateway.demoaspnetcore-igw.id
-    }
-    tags = {
-        Name = "demoaspnetcore_routetable_public"
-    }
+  vpc_id = aws_vpc.demoaspnetcore_vpc.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.demoaspnetcore-igw.id
+  }
+  tags = {
+    Name = "demoaspnetcore_routetable_public"
+  }
 }
 
 resource "aws_route_table_association" "demoaspnetcore_subnet_public1_ass" {
-    subnet_id = aws_subnet.demoaspnetcore_subnet_public1.id
-    route_table_id = aws_route_table.demoaspnetcore_routetable_public.id
+  subnet_id      = aws_subnet.demoaspnetcore_subnet_public1.id
+  route_table_id = aws_route_table.demoaspnetcore_routetable_public.id
 }
 
 resource "aws_route_table_association" "demoaspnetcore_subnet_public2_ass" {
-    subnet_id = aws_subnet.demoaspnetcore_subnet_public2.id
-    route_table_id = aws_route_table.demoaspnetcore_routetable_public.id
+  subnet_id      = aws_subnet.demoaspnetcore_subnet_public2.id
+  route_table_id = aws_route_table.demoaspnetcore_routetable_public.id
 }
 
 resource "aws_security_group" "webserverInstance-sg" {
-    name = "webserverInstance-sg"
-    ingress {
-        from_port = 5000
-        to_port = 5000
-        protocol = "tcp"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
+  name = "webserverInstance-sg"
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = 5000
+    to_port     = 5000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-    vpc_id = aws_vpc.demoaspnetcore_vpc.id
+  vpc_id = aws_vpc.demoaspnetcore_vpc.id
 }
 
 
 resource "aws_security_group" "jenkinsInstance-sg" {
-    name = "jenkinsInstance-sg"
-    ingress {
-        from_port = 22
-        to_port = 22
-        protocol = "tcp"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
-    ingress {
-        from_port = 8080
-        to_port = 8080
-        protocol = "tcp"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
+  name = "jenkinsInstance-sg"
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-    vpc_id = aws_vpc.demoaspnetcore_vpc.id
+  vpc_id = aws_vpc.demoaspnetcore_vpc.id
 }
 
 resource "aws_instance" "webserver1" {
-  ami             = "ami-0b0dcb5067f052a63" # Amazon Linux 2 AMI (HVM) - Kernel 5.10, SSD Volume Type
-  instance_type   = "t2.micro"
-  subnet_id = aws_subnet.demoaspnetcore_subnet_private.id
+  ami             = var.ami
+  instance_type   = var.instance_type
+  key_name        = var.key_name
+  subnet_id       = aws_subnet.demoaspnetcore_subnet_public1.id
   security_groups = [aws_security_group.webserverInstance-sg.id]
   tags = {
     Name = "webserver1"
   }
-  user_data       = <<-EOF
-              #!/bin/bash
-              echo "Hello, World 1" > index.html
-              python3 -m http.server 5000 &
-              EOF
+  user_data = var.user_data_webserver1
 }
 
 resource "aws_instance" "webserver2" {
-  ami             = "ami-0b0dcb5067f052a63" # Amazon Linux 2 AMI (HVM) - Kernel 5.10, SSD Volume Type
-  instance_type   = "t2.micro"
-  subnet_id = aws_subnet.demoaspnetcore_subnet_private.id
+  ami             = var.ami
+  instance_type   = var.instance_type
+  key_name        = var.key_name
+  subnet_id       = aws_subnet.demoaspnetcore_subnet_public1.id
   security_groups = [aws_security_group.webserverInstance-sg.id]
   tags = {
     Name = "webserver2"
   }
-  user_data       = <<-EOF
-              #!/bin/bash
-              echo "Hello, World 2" > index.html
-              python3 -m http.server 5000 &
-              EOF
+  user_data = var.user_data_webserver2
 }
 
 resource "aws_instance" "jenkinsServer" {
-  ami             = "ami-0b0dcb5067f052a63" # Amazon Linux 2 AMI (HVM) - Kernel 5.10, SSD Volume Type
-  instance_type   = "t2.micro"
-  key_name = "pcKP"
-  subnet_id = aws_subnet.demoaspnetcore_subnet_public1.id
-  security_groups = [aws_security_group.jenkinsInstance-sg.id]
-  associate_public_ip_address =  true
+  ami                         = var.ami
+  instance_type               = var.instance_type
+  key_name                    = var.key_name
+  subnet_id                   = aws_subnet.demoaspnetcore_subnet_public1.id
+  security_groups             = [aws_security_group.jenkinsInstance-sg.id]
+  associate_public_ip_address = true
   tags = {
     Name = "jenkinsServer"
   }
-  user_data       = <<-EOF
-              #!/bin/bash
-              echo "Hello, World from Jenkins" > index.html
-              python3 -m http.server 8080 &
-              EOF
+  user_data = var.user_data_jenkins
 }
 
 resource "aws_s3_bucket" "bucket" {
@@ -178,7 +177,7 @@ resource "aws_s3_bucket_versioning" "bucket_versioning" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "bucket_crypto_conf" {
-  bucket        = aws_s3_bucket.bucket.bucket
+  bucket = aws_s3_bucket.bucket.bucket
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
@@ -215,56 +214,35 @@ resource "aws_lb_target_group_attachment" "webserver2-att" {
   port             = 5000
 }
 
-resource "aws_lb_listener_rule" "webserver-lsn" {
-  listener_arn = aws_lb_listener.demoaspnetcore-http.arn
-  priority     = 100
-
-  condition {
-    path_pattern {
-      values = ["*"]
-    }
-  }
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.demoaspnet-tg.arn
-  }
-}
-
-
 resource "aws_security_group" "demoaspnetcore-alb-sg" {
   ingress {
-        from_port = 80
-        to_port = 80
-        protocol = "tcp"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
   egress {
-        from_port = 0
-        to_port = 0
-        protocol = "-1"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
-  name = "demoaspnetcore-alb-sg"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  name   = "demoaspnetcore-alb-sg"
   vpc_id = aws_vpc.demoaspnetcore_vpc.id
-    
+
 }
 
 resource "aws_lb" "demoaspnetcore-load_balancer" {
   name               = "web-app-lb"
   load_balancer_type = "application"
   subnet_mapping {
-    subnet_id     = aws_subnet.demoaspnetcore_subnet_public1.id
+    subnet_id = aws_subnet.demoaspnetcore_subnet_public1.id
   }
 
   subnet_mapping {
-    subnet_id     = aws_subnet.demoaspnetcore_subnet_public2.id
+    subnet_id = aws_subnet.demoaspnetcore_subnet_public2.id
   }
-
-  subnet_mapping {
-    subnet_id     = aws_subnet.demoaspnetcore_subnet_private.id
-  }
-  security_groups    = [aws_security_group.demoaspnetcore-alb-sg.id]
+  security_groups = [aws_security_group.demoaspnetcore-alb-sg.id]
 }
 
 resource "aws_lb_listener" "demoaspnetcore-http" {
@@ -283,5 +261,21 @@ resource "aws_lb_listener" "demoaspnetcore-http" {
       message_body = "404: page not found"
       status_code  = 404
     }
+  }
+}
+
+resource "aws_lb_listener_rule" "webserver-lsn" {
+  listener_arn = aws_lb_listener.demoaspnetcore-http.arn
+  priority     = 100
+
+  condition {
+    path_pattern {
+      values = ["*"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.demoaspnet-tg.arn
   }
 }
