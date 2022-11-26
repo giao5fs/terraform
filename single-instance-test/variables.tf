@@ -21,20 +21,6 @@ variable "key_name" {
 variable "user_data_webserver1" {
   default = <<-EOF
             #!/bin/bash
-            
-            EOF
-}
-
-variable "user_data_webserver2" {
-  default = <<-EOF
-            #!/bin/bash
-    
-            EOF
-}
-
-variable "user_data_jenkins" {
-  default = <<-EOF
-            #!/bin/bash
 
             EOF
 }

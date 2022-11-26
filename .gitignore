@@ -3,10 +3,14 @@ aws-backend/*
 demo-reference/*
 sample-terraform-structure/*
 webapp/*
+single-instance-test/*
 # Except for :
 !aws-backend/*.tf
 !demo-reference/*.tf
 !sample-terraform-structure/*.tf
 !webapp/*.tf
+!webapp/*.sh
+!single-instance-test/*.tf
+!single-instance-test/*.sh
 
 

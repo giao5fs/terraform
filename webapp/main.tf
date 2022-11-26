@@ -112,8 +112,8 @@ resource "aws_security_group" "jenkinsInstance-sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   ingress {
-    from_port   = 8080
-    to_port     = 8080
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -137,6 +137,25 @@ resource "aws_instance" "webserver1" {
     Name = "webserver1"
   }
   user_data = var.user_data_webserver1
+
+  connection {
+    type        = "ssh"
+    user        = local.ssh_user
+    private_key = file(local.private_key_path)
+    host        = aws_instance.webserver1.public_ip
+  }
+
+  provisioner "file" {
+    source      = "webserver.sh"
+    destination = "/tmp/webserver.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /tmp/webserver.sh",
+      "/tmp/webserver.sh args",
+    ]
+  }
 }
 
 resource "aws_instance" "webserver2" {
@@ -149,6 +168,25 @@ resource "aws_instance" "webserver2" {
     Name = "webserver2"
   }
   user_data = var.user_data_webserver2
+
+  connection {
+    type        = "ssh"
+    user        = local.ssh_user
+    private_key = file(local.private_key_path)
+    host        = aws_instance.webserver2.public_ip
+  }
+
+  provisioner "file" {
+    source      = "webserver.sh"
+    destination = "/tmp/webserver.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /tmp/webserver.sh",
+      "/tmp/webserver.sh args",
+    ]
+  }
 }
 
 resource "aws_instance" "jenkinsServer" {
@@ -162,6 +200,25 @@ resource "aws_instance" "jenkinsServer" {
     Name = "jenkinsServer"
   }
   user_data = var.user_data_jenkins
+
+  connection {
+    type        = "ssh"
+    user        = local.ssh_user
+    private_key = file(local.private_key_path)
+    host        = aws_instance.jenkinsServer.public_ip
+  }
+
+  provisioner "file" {
+    source      = "jenkins.sh"
+    destination = "/tmp/jenkins.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /tmp/jenkins.sh",
+      "/tmp/jenkins.sh args",
+    ]
+  }
 }
 
 resource "aws_s3_bucket" "bucket" {
@@ -278,4 +335,16 @@ resource "aws_lb_listener_rule" "webserver-lsn" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.demoaspnet-tg.arn
   }
+}
+
+output "webserver1_ip" {
+  value = aws_instance.webserver1.public_ip
+}
+
+output "webserver2_ip" {
+  value = aws_instance.webserver2.public_ip
+}
+
+output "jenkinsServer_ip" {
+  value = aws_instance.jenkinsServer.public_ip
 }
